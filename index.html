@@ -4,8 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#3b82f6">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="分帳">
 <title>分帳計算機</title>
 <style>
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -123,12 +121,7 @@
     padding: 11px 12px; font-size: 13px; font-weight: 600;
     border-radius: 10px; cursor: pointer; border: 1px solid #d0d5dd;
     background: #fff; color: #344054;
-    display: flex; align-items: center; justify-content: center; gap: 4px;
   }
-  .toolbar button:active { background: #f9fafb; }
-  .toolbar button.save { border-color: #3b82f6; color: #3b82f6; }
-  .toolbar button.print { border-color: #667085; color: #344054; }
-  .toolbar button.file { border-color: #027a48; color: #027a48; }
 
   .toast {
     position: fixed; left: 50%; bottom: 30px; transform: translateX(-50%) translateY(20px);
@@ -138,7 +131,6 @@
   }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
-  /* 房間介面 */
   .room-card { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; }
   .room-card h2 { color: #fff; }
   .room-card label { color: rgba(255,255,255,.85); }
@@ -150,15 +142,6 @@
     text-align: center; padding: 12px; background: rgba(255,255,255,.15);
     border-radius: 10px; margin: 10px 0;
   }
-  .online-dot {
-    display: inline-block; width: 8px; height: 8px; border-radius: 50%;
-    background: #10b981; margin-right: 4px;
-    animation: pulse 1.5s infinite;
-  }
-  @keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: .4; }
-  }
   .online-bar {
     display: flex; align-items: center; gap: 6px;
     font-size: 13px; color: #475467;
@@ -166,6 +149,10 @@
     margin-bottom: 14px;
   }
   .online-bar .count { font-weight: 700; color: #027a48; }
+  .online-dot {
+    display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    background: #10b981;
+  }
 
   @media print {
     body { background: #fff; padding: 0; max-width: none; }
@@ -173,7 +160,6 @@
     .card:has(#projectName), button, .toast, .room-card, .online-bar { display: none !important; }
     .card { box-shadow: none; border: 1px solid #ddd; page-break-inside: avoid; }
     h1 { font-size: 20px; }
-    .summary, .transfer { page-break-inside: avoid; }
     #result { margin-top: 0; }
   }
 </style>
@@ -204,7 +190,7 @@
         <button class="ghost" style="background:rgba(255,255,255,.15);color:#fff;border-color:rgba(255,255,255,.3)" onclick="copyRoomLink()">🔗 複製邀請連結</button>
         <button class="ghost" style="background:rgba(255,255,255,.15);color:#fff;border-color:rgba(255,255,255,.3)" onclick="leaveRoom()">🚪 離開房間</button>
       </div>
-      <div class="hint" id="roomHint">將代碼或連結傳給朋友，大家一齊編輯。</div>
+      <div class="hint">將代碼或連結傳給朋友，大家一齊編輯。</div>
     </div>
   </div>
 
@@ -215,20 +201,18 @@
   </div>
 </div>
 
-<!-- 未入房間時顯示的提示 -->
 <div id="notInRoom">
   <div class="card" style="text-align:center;color:#667085">
     請先建立或加入房間，先可以開始分帳。
   </div>
 </div>
 
-<!-- ===== 主介面（入房後顯示） ===== -->
+<!-- ===== 主介面 ===== -->
 <div id="mainSection" style="display:none">
-
   <div class="toolbar">
-    <button class="save" onclick="manualSave()">💾 儲存</button>
-    <button class="file" onclick="exportFile()">📁 另存 HTML</button>
-    <button class="print" onclick="printPage()">🖨️ 打印</button>
+    <button onclick="manualSave()">💾 儲存</button>
+    <button onclick="exportFile()">📁 另存 HTML</button>
+    <button onclick="printPage()">🖨️ 打印</button>
   </div>
 
   <div class="card project-section">
@@ -292,7 +276,6 @@
 
 <script>
 const MAX = 20;
-const FILE_VERSION = 1;
 
 const CURRENCIES = {
   HKD: {symbol:'HK$', decimals:2},
@@ -315,7 +298,6 @@ const RATES_TO_HKD = {
   KRW: 0.0056, MYR: 1.75
 };
 
-// ===== Firebase 設定 =====
 const firebaseConfig = {
   apiKey: "AIzaSyBKlIBBnMfgqQd8WN9GqaAmPi5J7zv7axk",
   authDomain: "my-split-app-2ba24.firebaseapp.com",
@@ -323,20 +305,22 @@ const firebaseConfig = {
   projectId: "my-split-app-2ba24",
   storageBucket: "my-split-app-2ba24.firebasestorage.app",
   messagingSenderId: "333319694964",
-  appId: "1:333319694964:web:da072d163b6078281fbf21",
-  measurementId: "G-Z2971K7T7S"
+  appId: "1:333319694964:web:da072d163b6078281fbf21"
 };
 
+// ===== 全域狀態 =====
 let db = null;
 let auth = null;
 let currentUser = null;
 let currentRoom = null;
 let roomRef = null;
+let onlineRef = null;
 let state = { projects: [], currentId: null };
 let lastResult = null;
 let lastAllResult = null;
-let suppressSync = false;
-let onlineRef = null;
+
+// 防止 Firebase 回音覆蓋本地
+let pendingWrites = 0;
 
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
 
@@ -372,7 +356,11 @@ function getDecimals() {
   return CURRENCIES[c] ? CURRENCIES[c].decimals : 2;
 }
 
-function fmt(n) { return fmtCur(currentProject().currency, n); }
+function fmt(n) {
+  const p = currentProject();
+  if (!p) return '$ 0.00';
+  return fmtCur(p.currency, n);
+}
 
 function fmtCur(currency, n) {
   const cur = CURRENCIES[currency] || {symbol:'$', decimals:2};
@@ -380,8 +368,6 @@ function fmtCur(currency, n) {
   const num = Number(n).toLocaleString('en-US', {minimumFractionDigits:d, maximumFractionDigits:d});
   return cur.symbol + ' ' + num;
 }
-
-function fmtWith(project, n) { return fmtCur(project.currency, n); }
 
 function projectTotal(p) {
   return p.people.reduce((s,x) => s + (parseFloat(x.amount) || 0), 0);
@@ -403,7 +389,7 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
-// ===== Firebase 初始化 =====
+// ===== Firebase =====
 function initFirebase() {
   try {
     firebase.initializeApp(firebaseConfig);
@@ -412,7 +398,6 @@ function initFirebase() {
     auth.onAuthStateChanged(user => {
       if (user) {
         currentUser = user;
-        // 檢查網址有無房間代碼
         const urlRoom = new URLSearchParams(location.search).get('room');
         if (urlRoom) {
           setTimeout(() => joinRoomByCode(urlRoom.toUpperCase()), 300);
@@ -420,7 +405,7 @@ function initFirebase() {
       }
     });
     auth.signInAnonymously().catch(err => {
-      console.error(err);
+      console.error('匿名登入失敗', err);
       toast('登入失敗，請重新整理');
     });
   } catch (e) {
@@ -431,6 +416,7 @@ function initFirebase() {
 
 // ===== 房間 =====
 function createRoom() {
+  if (!db) { toast('未連線，請稍等'); return; }
   const code = makeRoomCode();
   const initial = blankState();
   db.ref('rooms/' + code).set({
@@ -442,6 +428,7 @@ function createRoom() {
     saveRoomToUrl(code);
     subscribeRoom(code);
     updateRoomUI();
+    renderAll();
     toast('房間已建立：' + code);
   }).catch(err => {
     console.error(err);
@@ -457,6 +444,7 @@ function joinRoom() {
 }
 
 function joinRoomByCode(code) {
+  if (!db) { toast('未連線，請稍等'); return; }
   db.ref('rooms/' + code).once('value').then(snap => {
     if (!snap.exists()) {
       toast('房間不存在：' + code);
@@ -481,16 +469,16 @@ function saveRoomToUrl(code) {
 
 function subscribeRoom(code) {
   if (roomRef) roomRef.off();
+  if (onlineRef) onlineRef.off();
+
   roomRef = db.ref('rooms/' + code + '/state');
+
+  // 重要：只有喺「本地冇未完成寫入」時，先接受遠端資料
   roomRef.on('value', snap => {
-  if (suppressSync) return;
-  if (skipNextSync) {
-    skipNextSync = false;
-    return;
-  }
-  const data = snap.val();
-  if (data) {
-    state = data;
+    if (pendingWrites > 0) return; // 本地寫入進行中，忽略遠端
+    const data = snap.val();
+    if (data) {
+      state = data;
       if (!state.projects || !state.projects.length) {
         state = blankState();
       }
@@ -502,11 +490,14 @@ function subscribeRoom(code) {
   });
 
   // 線上人數
-  if (onlineRef) onlineRef.off();
   onlineRef = db.ref('rooms/' + code + '/online');
   const myRef = onlineRef.child(currentUser.uid);
-  const name = prompt('請輸入你的名字（給同一房間的人看）：', localStorage.getItem('splitDisplayName') || '') || '匿名';
-  localStorage.setItem('splitDisplayName', name);
+
+  let name = localStorage.getItem('splitDisplayName');
+  if (!name) {
+    name = prompt('請輸入你的名字（給同一房間的人看）：', '') || '匿名';
+    localStorage.setItem('splitDisplayName', name);
+  }
   myRef.set({name: name, at: Date.now()});
   myRef.onDisconnect().remove();
 
@@ -557,29 +548,61 @@ function updateRoomUI() {
 function copyRoomLink() {
   const url = new URL(location.href);
   url.searchParams.set('room', currentRoom);
-  const link = url.toString();
-  copyToClipboard(link);
+  copyToClipboard(url.toString());
 }
 
-// ===== 同步到 Firebase =====
+// ===== 同步（關鍵修正） =====
 let syncTimer = null;
+
 function syncToFirebase() {
   if (!currentRoom || !roomRef) return;
   clearTimeout(syncTimer);
   syncTimer = setTimeout(() => {
-    roomRef.set(state).catch(err => console.error('同步失敗', err));
-  }, 300);
+    pendingWrites++;
+    roomRef.set(JSON.parse(JSON.stringify(state)))
+      .catch(err => console.error('同步失敗', err))
+      .finally(() => {
+        // 延遲少少，等 Firebase 回音到達後再解除鎖
+        setTimeout(() => {
+          pendingWrites = Math.max(0, pendingWrites - 1);
+        }, 600);
+      });
+  }, 400);
+}
+
+// 立即同步（用喺新增/刪除專案等關鍵操作）
+function syncNow(callback) {
+  if (!currentRoom || !roomRef) {
+    if (callback) callback();
+    return;
+  }
+  clearTimeout(syncTimer);
+  pendingWrites++;
+  roomRef.set(JSON.parse(JSON.stringify(state)))
+    .then(() => {
+      setTimeout(() => {
+        pendingWrites = Math.max(0, pendingWrites - 1);
+        if (callback) callback();
+      }, 600);
+    })
+    .catch(err => {
+      console.error('同步失敗', err);
+      pendingWrites = Math.max(0, pendingWrites - 1);
+      if (callback) callback();
+    });
 }
 
 // ===== 主介面渲染 =====
 function renderAll() {
+  if (!state.projects || !state.projects.length) {
+    state = blankState();
+  }
   renderProjectList();
   const p = currentProject();
   if (!p) return;
   document.getElementById('projectName').value = p.name;
   document.getElementById('currency').value = p.currency;
   document.getElementById('count').value = p.people.length;
-  document.getElementById('result').innerHTML = '';
   render();
 }
 
@@ -605,7 +628,7 @@ function renderProjectList() {
     nameEl.textContent = p.name || '未命名專案';
     const metaEl = document.createElement('div');
     metaEl.className = 'pmeta';
-    metaEl.innerHTML = '<b>' + count + '</b> 人 · <b>' + escapeHtml(fmtWith(p, total)) + '</b>';
+    metaEl.innerHTML = '<b>' + count + '</b> 人 · <b>' + escapeHtml(fmtCur(p.currency, total)) + '</b>';
     info.appendChild(nameEl);
     info.appendChild(metaEl);
 
@@ -628,19 +651,24 @@ function renderProjectList() {
 function switchProjectById(id) {
   if (state.currentId === id) return;
   state.currentId = id;
-  syncToFirebase();
   renderAll();
+  syncNow();
 }
 
 function newProject() {
   const name = prompt('新專案名稱：', '專案 ' + (state.projects.length + 1));
   if (name === null) return;
+
   const p = blankProject((name || '').trim() || '未命名專案');
   state.projects.push(p);
   state.currentId = p.id;
-  syncToFirebase();
+
+  // 立即渲染本地，唔等 Firebase
   renderAll();
   toast('已新增專案');
+
+  // 然後同步
+  syncNow();
 }
 
 function deleteProjectById(id) {
@@ -648,42 +676,51 @@ function deleteProjectById(id) {
   const p = state.projects.find(x => x.id === id);
   if (!p) return;
   if (!confirm('確定刪除「' + p.name + '」？')) return;
+
   state.projects = state.projects.filter(x => x.id !== id);
-  if (state.currentId === id) state.currentId = state.projects[0].id;
-  syncToFirebase();
+  if (state.currentId === id) {
+    state.currentId = state.projects[0].id;
+  }
+
   renderAll();
+  syncNow();
   toast('已刪除專案');
 }
 
 function onProjectNameChange() {
   const p = currentProject();
+  if (!p) return;
   p.name = document.getElementById('projectName').value;
-  syncToFirebase();
   renderProjectList();
+  syncToFirebase();
 }
 
 function onCurrencyChange() {
   const p = currentProject();
+  if (!p) return;
   p.currency = document.getElementById('currency').value;
-  syncToFirebase();
   renderAll();
+  syncToFirebase();
 }
 
 function setCount() {
   const p = currentProject();
+  if (!p) return;
   let n = parseInt(document.getElementById('count').value) || 1;
   n = Math.max(1, Math.min(MAX, n));
   document.getElementById('count').value = n;
 
   while (p.people.length < n) p.people.push({name:'', amount:''});
   p.people = p.people.slice(0, n);
-  syncToFirebase();
+
   render();
   renderProjectList();
+  syncToFirebase();
 }
 
 function render() {
   const p = currentProject();
+  if (!p) return;
   const list = document.getElementById('list');
   list.innerHTML = '';
   p.people.forEach((person, i) => {
@@ -709,9 +746,9 @@ function render() {
     amtInput.value = person.amount;
     amtInput.oninput = e => {
       p.people[i].amount = e.target.value;
-      syncToFirebase();
       updateTotal();
       renderProjectList();
+      syncToFirebase();
     };
 
     const del = document.createElement('button');
@@ -720,9 +757,9 @@ function render() {
     del.onclick = () => {
       p.people.splice(i,1);
       document.getElementById('count').value = p.people.length;
-      syncToFirebase();
       render();
       renderProjectList();
+      syncNow();
     };
 
     row.appendChild(nameInput);
@@ -735,7 +772,8 @@ function render() {
 
 function updateTotal() {
   const p = currentProject();
-  document.getElementById('total').textContent = fmt(projectTotal(p));
+  if (!p) return;
+  document.getElementById('total').textContent = fmtCur(p.currency, projectTotal(p));
 }
 
 function getPeople() {
@@ -754,9 +792,9 @@ function clearAll() {
   p.people = [{name:'',amount:''},{name:'',amount:''},{name:'',amount:''}];
   document.getElementById('count').value = 3;
   document.getElementById('result').innerHTML = '';
-  syncToFirebase();
   render();
   renderProjectList();
+  syncNow();
 }
 
 // ===== 結算 =====
@@ -800,7 +838,7 @@ function calculate() {
     const label = r.diff > EPS ? '多付，應收回' : (r.diff < -EPS ? '少付，應補回' : '剛好');
     detailHTML += '<div class="summary">'
       + '<span class="label">' + escapeHtml(r.name) + '<span class="badge">' + label + '</span></span>'
-      + '<span class="val ' + cls + '">' + sign + fmt(r.diff) + '</span>'
+      + '<span class="val ' + cls + '">' + sign + fmtCur(p.currency, r.diff) + '</span>'
       + '</div>';
   });
 
@@ -811,7 +849,7 @@ function calculate() {
     transfers.forEach(t => {
       transferHTML += '<div class="transfer">'
         + '<span>' + escapeHtml(t.from) + ' <span class="arrow">→</span> ' + escapeHtml(t.to) + '</span>'
-        + '<span class="money">' + fmt(t.amount) + '</span>'
+        + '<span class="money">' + fmtCur(p.currency, t.amount) + '</span>'
         + '</div>';
     });
   }
@@ -824,9 +862,9 @@ function calculate() {
     '<div class="card">'
     + '<h2>' + escapeHtml(p.name) + '</h2>'
     + '<div style="font-size:12px;color:#98a2b3;margin-bottom:8px">計算時間：' + stamp + '</div>'
-    + '<div class="summary"><span class="label">總支出</span><span class="val">' + fmt(total) + '</span></div>'
+    + '<div class="summary"><span class="label">總支出</span><span class="val">' + fmtCur(p.currency, total) + '</span></div>'
     + '<div class="summary"><span class="label">人數</span><span class="val">' + n + ' 人</span></div>'
-    + '<div class="summary"><span class="label">平均每人應付</span><span class="val">' + fmt(avg) + '</span></div>'
+    + '<div class="summary"><span class="label">平均每人應付</span><span class="val">' + fmtCur(p.currency, avg) + '</span></div>'
     + '</div>'
     + '<div class="card"><h2>每人明細</h2>' + detailHTML + '</div>'
     + '<div class="card"><h2>誰要補給誰（共 ' + transfers.length + ' 筆）</h2>' + transferHTML + '</div>'
@@ -834,15 +872,13 @@ function calculate() {
     + '<h2>匯出 / 分享</h2>'
     + '<div class="btn-row">'
     + '<button class="ghost" onclick="exportText()">📋 複製文字</button>'
-    + '<button class="ghost" onclick="exportImage()">🖼️ 存成圖片</button>'
+    + '<button class="ghost" onclick="shareNative()">📤 分享</button>'
     + '</div>'
     + '<button class="ghost" onclick="printPage()">🖨️ 打印 / 存 PDF</button>'
-    + '<button class="ghost" onclick="shareNative()">📤 分享</button>'
     + '</div>';
 
   lastResult = {project: p, total, n, avg, rows, transfers, stamp};
   lastAllResult = null;
-  result.scrollIntoView({behavior:'smooth', block:'start'});
 }
 
 // ===== 全部合計 =====
@@ -973,14 +1009,13 @@ function calculateAllProjects() {
     + '<h2>匯出 / 分享</h2>'
     + '<div class="btn-row">'
     + '<button class="ghost" onclick="exportAllText()">📋 複製文字</button>'
-    + '<button class="ghost" onclick="printPage()">🖨️ 打印 / 存 PDF</button>'
-    + '</div>'
     + '<button class="ghost" onclick="shareNativeAll()">📤 分享</button>'
+    + '</div>'
+    + '<button class="ghost" onclick="printPage()">🖨️ 打印 / 存 PDF</button>'
     + '</div>';
 
   lastAllResult = {displayCurrency, grandTotal, n, avg, rows, transfers, validProjectCount, stamp};
   lastResult = null;
-  result.scrollIntoView({behavior:'smooth', block:'start'});
 }
 
 // ===== 匯出文字 =====
@@ -991,18 +1026,18 @@ function buildText() {
 
   let t = '📊 ' + project.name + '\n──────────────\n';
   t += '計算時間：' + (stamp || '') + '\n';
-  t += '總支出：' + fmt(total) + '\n';
+  t += '總支出：' + fmtCur(project.currency, total) + '\n';
   t += '人數：' + n + ' 人\n';
-  t += '平均每人應付：' + fmt(avg) + '\n\n';
+  t += '平均每人應付：' + fmtCur(project.currency, avg) + '\n\n';
   t += '【每人明細】\n';
   rows.forEach(r => {
     const sign = r.diff > 0 ? '+' : '';
     const label = r.diff > 0.001 ? '多付' : (r.diff < -0.001 ? '少付' : '剛好');
-    t += r.name + '：出 ' + fmt(r.amount) + '（' + label + ' ' + sign + fmt(r.diff) + '）\n';
+    t += r.name + '：出 ' + fmtCur(project.currency, r.amount) + '（' + label + ' ' + sign + fmtCur(project.currency, r.diff) + '）\n';
   });
   t += '\n【轉帳清單】\n';
   if (transfers.length === 0) t += '無需補錢 ✓\n';
-  else transfers.forEach((tr, i) => { t += (i+1) + '. ' + tr.from + ' → ' + tr.to + '：' + fmt(tr.amount) + '\n'; });
+  else transfers.forEach((tr, i) => { t += (i+1) + '. ' + tr.from + ' → ' + tr.to + '：' + fmtCur(project.currency, tr.amount) + '\n'; });
   return t;
 }
 
@@ -1066,47 +1101,6 @@ function fallbackCopy(t) {
   document.body.removeChild(ta);
 }
 
-// ===== 匯出圖片 =====
-function exportImage() {
-  if (!lastResult) { toast('請先計算'); return; }
-  const resultEl = document.getElementById('result');
-  const clone = resultEl.cloneNode(true);
-  clone.querySelectorAll('button').forEach(b => b.remove());
-  clone.querySelectorAll('.btn-row').forEach(b => b.remove());
-  const cards = clone.querySelectorAll('.card');
-  if (cards.length >= 1) cards[cards.length - 1].remove();
-
-  const wrap = document.createElement('div');
-  wrap.style.cssText = 'position:fixed;left:-9999px;top:0;width:600px;background:#f2f4f7;padding:24px;font-family:-apple-system,BlinkMacSystemFont,"PingFang TC","Microsoft JhengHei",sans-serif;';
-  wrap.appendChild(clone);
-  document.body.appendChild(wrap);
-
-  const draw = () => {
-    html2canvas(wrap, {scale:2, backgroundColor:'#f2f4f7'}).then(canvas => {
-      const p = currentProject();
-      const a = document.createElement('a');
-      a.download = (p.name || '分帳') + '.png';
-      a.href = canvas.toDataURL('image/png');
-      a.click();
-      document.body.removeChild(wrap);
-      toast('已儲存圖片');
-    }).catch(() => {
-      document.body.removeChild(wrap);
-      toast('圖片產生失敗');
-    });
-  };
-
-  if (typeof html2canvas === 'undefined') {
-    const s = document.createElement('script');
-    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
-    s.onload = draw;
-    s.onerror = () => { document.body.removeChild(wrap); toast('無法載入圖片工具'); };
-    document.head.appendChild(s);
-  } else {
-    draw();
-  }
-}
-
 // ===== 分享 =====
 function shareNative() {
   const t = buildText();
@@ -1128,229 +1122,6 @@ function doShare(t) {
   }
 }
 
-// ===== 另存 HTML =====
-function exportFile() {
-  const ts = new Date();
-  const stamp = ts.getFullYear() + '-' + String(ts.getMonth()+1).padStart(2,'0') + '-' + String(ts.getDate()).padStart(2,'0')
-    + ' ' + String(ts.getHours()).padStart(2,'0') + ':' + String(ts.getMinutes()).padStart(2,'0');
-
-  const data = JSON.stringify(state);
-  const reportHTML = buildOfflineReport();
-
-  const html = `<!DOCTYPE html>
-<html lang="zh-Hant">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>分帳報表 ${stamp}</title>
-<style>
-  * { box-sizing: border-box; }
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif; margin: 0; padding: 20px 16px 40px; background: #f2f4f7; color: #1a1a1a; max-width: 720px; margin: 0 auto; }
-  h1 { font-size: 22px; margin: 8px 0 4px; }
-  .sub { color: #667085; font-size: 13px; margin-bottom: 20px; }
-  .card { background: #fff; border-radius: 14px; padding: 16px; box-shadow: 0 1px 3px rgba(16,24,40,.08); margin-bottom: 14px; }
-  h2 { font-size: 16px; margin: 0 0 12px; }
-  .summary { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px dashed #eaecf0; font-size: 15px; }
-  .summary:last-child { border-bottom: none; }
-  .summary .label { color: #475467; }
-  .summary .val { font-weight: 600; }
-  .pos { color: #027a48; } .neg { color: #b42318; }
-  .transfer { display: flex; align-items: center; justify-content: space-between; padding: 12px; background: #f9fafb; border-radius: 10px; margin-bottom: 8px; font-size: 15px; }
-  .transfer .arrow { color: #98a2b3; margin: 0 6px; }
-  .transfer .money { font-weight: 700; color: #3b82f6; white-space: nowrap; }
-  .badge { display: inline-block; font-size: 11px; padding: 2px 7px; border-radius: 20px; background: #eaecf0; color: #475467; margin-left: 6px; }
-  .ok { text-align: center; color: #027a48; font-size: 15px; padding: 14px; background:#ecfdf3; border-radius: 10px; }
-  .empty { text-align: center; color: #98a2b3; font-size: 14px; padding: 20px 0; }
-  .notice { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; border-radius: 10px; padding: 12px 14px; font-size: 13px; margin-bottom: 16px; line-height: 1.6; }
-  .footer { text-align: center; color: #98a2b3; font-size: 12px; margin-top: 20px; }
-  .proj-detail { padding: 12px 0; border-bottom: 1px dashed #eaecf0; }
-  .proj-detail:last-child { border-bottom: none; }
-  .proj-sub { font-size: 12px; color: #667085; margin-top: 6px; line-height: 1.7; }
-  @media print { body { background: #fff; padding: 0; } .notice { display: none; } .card { box-shadow: none; border: 1px solid #ddd; page-break-inside: avoid; } }
-</style>
-</head>
-<body>
-<h1>分帳報表</h1>
-<div class="sub">匯出時間：${stamp}</div>
-<div class="notice">📄 這是從「分帳計算機」匯出的報表檔案，雙擊即可在任何瀏覽器打開查看。</div>
-${reportHTML}
-<div class="footer">由 分帳計算機 產生</div>
-</body>
-</html>`;
-
-  const blob = new Blob([html], {type:'text/html;charset=utf-8'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  const dstr = ts.toISOString().slice(0,10);
-  a.href = url;
-  a.download = '分帳報表_' + dstr + '.html';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-  toast('已匯出 HTML 檔案');
-}
-
-function buildOfflineReport() {
-  let html = '';
-  const validProjects = state.projects.filter(p => projectTotal(p) > 0);
-  if (validProjects.length === 0) {
-    return '<div class="card"><div class="empty">沒有任何專案有金額</div></div>';
-  }
-
-  validProjects.forEach(proj => {
-    const list = proj.people
-      .map((x, i) => ({
-        name: (x.name || '').trim() || ('第 ' + (i+1) + ' 人'),
-        amount: parseFloat(x.amount) || 0
-      }))
-      .filter(x => x.amount > 0 || (x.name && x.name.indexOf('第 ') !== 0));
-
-    if (list.length < 1) return;
-
-    const total = list.reduce((s,x) => s + x.amount, 0);
-    const n = list.length;
-    const avg = total / n;
-    const d = CURRENCIES[proj.currency] ? CURRENCIES[proj.currency].decimals : 2;
-    const round = v => Math.round(v * Math.pow(10,d)) / Math.pow(10,d);
-    const EPS = d === 0 ? 0.5 : 0.005;
-
-    const rows = list.map(x => ({...x, diff: round(x.amount - avg)}));
-
-    const debtors = rows.filter(r => r.diff < -EPS).map(r => ({name:r.name, bal:-r.diff})).sort((a,b)=>b.bal-a.bal);
-    const creditors = rows.filter(r => r.diff > EPS).map(r => ({name:r.name, bal:r.diff})).sort((a,b)=>b.bal-a.bal);
-
-    const transfers = [];
-    let di = 0, ci = 0;
-    while (di < debtors.length && ci < creditors.length) {
-      const pay = Math.min(debtors[di].bal, creditors[ci].bal);
-      if (pay > EPS) transfers.push({from: debtors[di].name, to: creditors[ci].name, amount: round(pay)});
-      debtors[di].bal -= pay;
-      creditors[ci].bal -= pay;
-      if (debtors[di].bal < EPS) di++;
-      if (creditors[ci].bal < EPS) ci++;
-    }
-
-    let detailHTML = '';
-    rows.forEach(r => {
-      const cls = r.diff > EPS ? 'pos' : (r.diff < -EPS ? 'neg' : '');
-      const sign = r.diff > EPS ? '+' : '';
-      const label = r.diff > EPS ? '多付，應收回' : (r.diff < -EPS ? '少付，應補回' : '剛好');
-      detailHTML += '<div class="summary">'
-        + '<span class="label">' + escapeHtml(r.name) + '<span class="badge">' + label + '</span></span>'
-        + '<span class="val ' + cls + '">' + sign + fmtCur(proj.currency, r.diff) + '</span>'
-        + '</div>';
-    });
-
-    let transferHTML = '';
-    if (transfers.length === 0) {
-      transferHTML = '<div class="ok">✓ 大家都付得剛剛好，不需要補錢</div>';
-    } else {
-      transfers.forEach(t => {
-        transferHTML += '<div class="transfer">'
-          + '<span>' + escapeHtml(t.from) + ' <span class="arrow">→</span> ' + escapeHtml(t.to) + '</span>'
-          + '<span class="money">' + fmtCur(proj.currency, t.amount) + '</span>'
-          + '</div>';
-      });
-    }
-
-    html += '<div class="card"><h2>' + escapeHtml(proj.name) + '</h2>'
-      + '<div class="summary"><span class="label">總支出</span><span class="val">' + fmtCur(proj.currency, total) + '</span></div>'
-      + '<div class="summary"><span class="label">人數</span><span class="val">' + n + ' 人</span></div>'
-      + '<div class="summary"><span class="label">平均每人應付</span><span class="val">' + fmtCur(proj.currency, avg) + '</span></div>'
-      + '</div>'
-      + '<div class="card"><h2>' + escapeHtml(proj.name) + ' — 每人明細</h2>' + detailHTML + '</div>'
-      + '<div class="card"><h2>' + escapeHtml(proj.name) + ' — 誰要補給誰（共 ' + transfers.length + ' 筆）</h2>' + transferHTML + '</div>';
-  });
-
-  // 全部合計
-  const allCurrencies = new Set(validProjects.map(p => p.currency));
-  let displayCurrency = allCurrencies.size === 1 ? [...allCurrencies][0] : (validProjects[0] ? validProjects[0].currency : 'HKD');
-  const displayRate = RATES_TO_HKD[displayCurrency] || 1;
-  const dd = CURRENCIES[displayCurrency] ? CURRENCIES[displayCurrency].decimals : 2;
-  const round2 = v => Math.round(v * Math.pow(10,dd)) / Math.pow(10,dd);
-  const EPS2 = dd === 0 ? 0.5 : 0.005;
-
-  const peopleMap = new Map();
-  let grandTotalHKD = 0;
-  validProjects.forEach(proj => {
-    const rate = RATES_TO_HKD[proj.currency] || 1;
-    proj.people.forEach((x, i) => {
-      const amt = parseFloat(x.amount) || 0;
-      if (amt <= 0) return;
-      const rawName = (x.name || '').trim() || ('第 ' + (i+1) + ' 人');
-      const key = rawName.toLowerCase();
-      if (!peopleMap.has(key)) peopleMap.set(key, {displayName: rawName, paidHKD: 0, details: []});
-      const person = peopleMap.get(key);
-      person.paidHKD += amt * rate;
-      person.details.push({project: proj.name, amount: amt, currency: proj.currency});
-    });
-    grandTotalHKD += projectTotal(proj) * rate;
-  });
-
-  if (peopleMap.size > 0) {
-    const n = peopleMap.size;
-    const grandTotal = grandTotalHKD / displayRate;
-    const avg = grandTotal / n;
-
-    const rows = [];
-    peopleMap.forEach(person => {
-      const paid = person.paidHKD / displayRate;
-      rows.push({name: person.displayName, paid, diff: round2(paid - avg), details: person.details});
-    });
-    rows.sort((a,b) => b.paid - a.paid);
-
-    const debtors = rows.filter(r => r.diff < -EPS2).map(r => ({name:r.name, bal:-r.diff})).sort((a,b)=>b.bal-a.bal);
-    const creditors = rows.filter(r => r.diff > EPS2).map(r => ({name:r.name, bal:r.diff})).sort((a,b)=>b.bal-a.bal);
-
-    const transfers = [];
-    let di = 0, ci = 0;
-    while (di < debtors.length && ci < creditors.length) {
-      const pay = Math.min(debtors[di].bal, creditors[ci].bal);
-      if (pay > EPS2) transfers.push({from: debtors[di].name, to: creditors[ci].name, amount: round2(pay)});
-      debtors[di].bal -= pay;
-      creditors[ci].bal -= pay;
-      if (debtors[di].bal < EPS2) di++;
-      if (creditors[ci].bal < EPS2) ci++;
-    }
-
-    let detailHTML = '';
-    rows.forEach(r => {
-      const cls = r.diff > EPS2 ? 'pos' : (r.diff < -EPS2 ? 'neg' : '');
-      const sign = r.diff > EPS2 ? '+' : '';
-      const label = r.diff > EPS2 ? '多付，應收回' : (r.diff < -EPS2 ? '少付，應補回' : '剛好');
-      const detailSub = r.details.map(dt => '　· ' + escapeHtml(dt.project) + '：' + escapeHtml(fmtCur(dt.currency, dt.amount))).join('<br>');
-      detailHTML += '<div class="proj-detail">'
-        + '<div class="summary" style="border:none;padding:0">'
-        + '<span class="label">' + escapeHtml(r.name) + '<span class="badge">' + label + '</span></span>'
-        + '<span class="val ' + cls + '">' + sign + fmtCur(displayCurrency, r.diff) + '</span>'
-        + '</div>'
-        + '<div class="proj-sub">總出資：<b>' + escapeHtml(fmtCur(displayCurrency, r.paid)) + '</b><br>' + detailSub + '</div>'
-        + '</div>';
-    });
-
-    let transferHTML = '';
-    if (transfers.length === 0) {
-      transferHTML = '<div class="ok">✓ 大家都付得剛剛好，不需要補錢</div>';
-    } else {
-      transfers.forEach(t => {
-        transferHTML += '<div class="transfer"><span>' + escapeHtml(t.from) + ' <span class="arrow">→</span> ' + escapeHtml(t.to) + '</span><span class="money">' + fmtCur(displayCurrency, t.amount) + '</span></div>';
-      });
-    }
-
-    html += '<div class="card" style="border:2px solid #667eea"><h2>📊 全部專案合計</h2>'
-      + '<div class="summary"><span class="label">專案數</span><span class="val">' + validProjects.length + ' 個</span></div>'
-      + '<div class="summary"><span class="label">參與人數</span><span class="val">' + n + ' 人</span></div>'
-      + '<div class="summary"><span class="label">總支出</span><span class="val">' + fmtCur(displayCurrency, grandTotal) + '</span></div>'
-      + '<div class="summary"><span class="label">平均每人應付</span><span class="val">' + fmtCur(displayCurrency, avg) + '</span></div>'
-      + '</div>'
-      + '<div class="card"><h2>每人出資明細（合計）</h2>' + detailHTML + '</div>'
-      + '<div class="card"><h2>誰要補給誰（合計，共 ' + transfers.length + ' 筆）</h2>' + transferHTML + '</div>';
-  }
-
-  return html;
-}
-
 // ===== 打印 =====
 function printPage() {
   if (!document.getElementById('result').innerHTML.trim()) {
@@ -1360,21 +1131,139 @@ function printPage() {
 }
 
 function manualSave() {
-  syncToFirebase();
-  toast('已同步到雲端');
+  syncNow(() => toast('已同步到雲端'));
+}
+
+// ===== 另存 HTML =====
+function exportFile() {
+  const ts = new Date();
+  const stamp = ts.getFullYear() + '-' + String(ts.getMonth()+1).padStart(2,'0') + '-' + String(ts.getDate()).padStart(2,'0')
+    + ' ' + String(ts.getHours()).padStart(2,'0') + ':' + String(ts.getMinutes()).padStart(2,'0');
+
+  let reportHTML = '';
+  const validProjects = state.projects.filter(p => projectTotal(p) > 0);
+  if (validProjects.length === 0) {
+    reportHTML = '<div class="card"><div class="empty">沒有任何專案有金額</div></div>';
+  } else {
+    validProjects.forEach(proj => {
+      const list = proj.people
+        .map((x, i) => ({
+          name: (x.name || '').trim() || ('第 ' + (i+1) + ' 人'),
+          amount: parseFloat(x.amount) || 0
+        }))
+        .filter(x => x.amount > 0 || (x.name && x.name.indexOf('第 ') !== 0));
+
+      if (list.length < 1) return;
+
+      const total = list.reduce((s,x) => s + x.amount, 0);
+      const n = list.length;
+      const avg = total / n;
+      const d = CURRENCIES[proj.currency] ? CURRENCIES[proj.currency].decimals : 2;
+      const round = v => Math.round(v * Math.pow(10,d)) / Math.pow(10,d);
+      const EPS = d === 0 ? 0.5 : 0.005;
+
+      const rows = list.map(x => ({...x, diff: round(x.amount - avg)}));
+
+      const debtors = rows.filter(r => r.diff < -EPS).map(r => ({name:r.name, bal:-r.diff})).sort((a,b)=>b.bal-a.bal);
+      const creditors = rows.filter(r => r.diff > EPS).map(r => ({name:r.name, bal:r.diff})).sort((a,b)=>b.bal-a.bal);
+
+      const transfers = [];
+      let di = 0, ci = 0;
+      while (di < debtors.length && ci < creditors.length) {
+        const pay = Math.min(debtors[di].bal, creditors[ci].bal);
+        if (pay > EPS) transfers.push({from: debtors[di].name, to: creditors[ci].name, amount: round(pay)});
+        debtors[di].bal -= pay;
+        creditors[ci].bal -= pay;
+        if (debtors[di].bal < EPS) di++;
+        if (creditors[ci].bal < EPS) ci++;
+      }
+
+      let detailHTML = '';
+      rows.forEach(r => {
+        const cls = r.diff > EPS ? 'pos' : (r.diff < -EPS ? 'neg' : '');
+        const sign = r.diff > EPS ? '+' : '';
+        const label = r.diff > EPS ? '多付，應收回' : (r.diff < -EPS ? '少付，應補回' : '剛好');
+        detailHTML += '<div class="summary"><span class="label">' + escapeHtml(r.name) + '<span class="badge">' + label + '</span></span><span class="val ' + cls + '">' + sign + fmtCur(proj.currency, r.diff) + '</span></div>';
+      });
+
+      let transferHTML = '';
+      if (transfers.length === 0) {
+        transferHTML = '<div class="ok">✓ 大家都付得剛剛好，不需要補錢</div>';
+      } else {
+        transfers.forEach(t => {
+          transferHTML += '<div class="transfer"><span>' + escapeHtml(t.from) + ' → ' + escapeHtml(t.to) + '</span><span class="money">' + fmtCur(proj.currency, t.amount) + '</span></div>';
+        });
+      }
+
+      reportHTML += '<div class="card"><h2>' + escapeHtml(proj.name) + '</h2>'
+        + '<div class="summary"><span class="label">總支出</span><span class="val">' + fmtCur(proj.currency, total) + '</span></div>'
+        + '<div class="summary"><span class="label">人數</span><span class="val">' + n + ' 人</span></div>'
+        + '<div class="summary"><span class="label">平均每人應付</span><span class="val">' + fmtCur(proj.currency, avg) + '</span></div>'
+        + '</div>'
+        + '<div class="card"><h2>每人明細</h2>' + detailHTML + '</div>'
+        + '<div class="card"><h2>誰要補給誰</h2>' + transferHTML + '</div>';
+    });
+  }
+
+  const html = `<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>分帳報表 ${stamp}</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "PingFang TC", "Microsoft JhengHei", sans-serif; margin: 0; padding: 20px 16px; background: #f2f4f7; color: #1a1a1a; max-width: 720px; margin: 0 auto; }
+  h1 { font-size: 22px; }
+  .sub { color: #667085; font-size: 13px; margin-bottom: 20px; }
+  .card { background: #fff; border-radius: 14px; padding: 16px; box-shadow: 0 1px 3px rgba(16,24,40,.08); margin-bottom: 14px; }
+  h2 { font-size: 16px; margin: 0 0 12px; }
+  .summary { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px dashed #eaecf0; font-size: 15px; }
+  .summary:last-child { border-bottom: none; }
+  .label { color: #475467; } .val { font-weight: 600; }
+  .pos { color: #027a48; } .neg { color: #b42318; }
+  .transfer { display: flex; align-items: center; justify-content: space-between; padding: 12px; background: #f9fafb; border-radius: 10px; margin-bottom: 8px; font-size: 15px; }
+  .transfer .money { font-weight: 700; color: #3b82f6; }
+  .badge { display: inline-block; font-size: 11px; padding: 2px 7px; border-radius: 20px; background: #eaecf0; color: #475467; margin-left: 6px; }
+  .ok { text-align: center; color: #027a48; padding: 14px; background:#ecfdf3; border-radius: 10px; }
+  .empty { text-align: center; color: #98a2b3; padding: 20px 0; }
+  .notice { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; border-radius: 10px; padding: 12px 14px; font-size: 13px; margin-bottom: 16px; }
+</style>
+</head>
+<body>
+<h1>分帳報表</h1>
+<div class="sub">匯出時間：${stamp}</div>
+<div class="notice">📄 這是從「分帳計算機」匯出的報表。</div>
+${reportHTML}
+</body>
+</html>`;
+
+  const blob = new Blob([html], {type:'text/html;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = '分帳報表_' + ts.toISOString().slice(0,10) + '.html';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  toast('已匯出 HTML 檔案');
+}
+
+// ===== 綁定事件 =====
+function bindEvents() {
+  const nameEl = document.getElementById('projectName');
+  const curEl = document.getElementById('currency');
+  if (nameEl) nameEl.addEventListener('input', onProjectNameChange);
+  if (curEl) curEl.addEventListener('change', onCurrencyChange);
 }
 
 // ===== 啟動 =====
-function renderMain() {
-  // 綁定事件
-  document.getElementById('projectName').addEventListener('input', onProjectNameChange);
-  document.getElementById('currency').addEventListener('change', onCurrencyChange);
-}
-
 window.addEventListener('load', () => {
-  initFirebase();
+  state = blankState();
   updateRoomUI();
-  renderMain();
+  bindEvents();
+  renderAll();
+  initFirebase();
 });
 </script>
 </body>
