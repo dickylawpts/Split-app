@@ -483,10 +483,14 @@ function subscribeRoom(code) {
   if (roomRef) roomRef.off();
   roomRef = db.ref('rooms/' + code + '/state');
   roomRef.on('value', snap => {
-    if (suppressSync) return;
-    const data = snap.val();
-    if (data) {
-      state = data;
+  if (suppressSync) return;
+  if (skipNextSync) {
+    skipNextSync = false;
+    return;
+  }
+  const data = snap.val();
+  if (data) {
+    state = data;
       if (!state.projects || !state.projects.length) {
         state = blankState();
       }
